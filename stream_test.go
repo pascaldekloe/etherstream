@@ -17,6 +17,9 @@ import (
 )
 
 func TestEventsWithHistory(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
 	sigHash := ether.HexToHash("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef")
 	stub := logStub{
 		historicN: 1,
@@ -27,7 +30,7 @@ func TestEventsWithHistory(t *testing.T) {
 		},
 	}
 
-	live, sub, history, err := Reader{Backend: &stub}.EventsWithHistory(&abi.Event{ID: sigHash})
+	live, sub, history, err := Reader{Backend: &stub}.EventsWithHistory(ctx, &abi.Event{ID: sigHash})
 	if err != nil {
 		t.Fatal("got error:", err)
 	}
@@ -48,6 +51,9 @@ func TestEventsWithHistory(t *testing.T) {
 }
 
 func TestNoLive(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
 	stub := logStub{
 		historicN: 99,
 		liveN:     0,
@@ -57,7 +63,7 @@ func TestNoLive(t *testing.T) {
 		},
 	}
 
-	live, _, history, err := Reader{Backend: &stub}.QueryWithHistory(&stub.wantQuery)
+	live, _, history, err := Reader{Backend: &stub}.QueryWithHistory(ctx, &stub.wantQuery)
 	if err != nil {
 		t.Fatal("got error:", err)
 	}
@@ -65,16 +71,19 @@ func TestNoLive(t *testing.T) {
 		t.Errorf("got %d historic entries, want %d", len(history), stub.historicN)
 	}
 
+	// live entry overlaps with historic one
 	select {
 	case l := <-live:
 		t.Errorf("got live entry %+v, want none", l)
 	default:
-		// live entry overlaps with historic one
 		break // OK
 	}
 }
 
 func TestNoHistory(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
 	stub := logStub{
 		historicN: 0,
 		liveN:     2,
@@ -84,7 +93,7 @@ func TestNoHistory(t *testing.T) {
 		},
 	}
 
-	live, _, history, err := Reader{Backend: &stub}.QueryWithHistory(&stub.wantQuery)
+	live, _, history, err := Reader{Backend: &stub}.QueryWithHistory(ctx, &stub.wantQuery)
 	if err != nil {
 		t.Fatal("got error:", err)
 	}
@@ -92,14 +101,12 @@ func TestNoHistory(t *testing.T) {
 		t.Errorf("got %d historic entries, want none", len(history))
 	}
 
-	timeout := time.NewTimer(100 * time.Millisecond)
-	defer timeout.Stop()
 	select {
 	case l := <-live:
 		if l.BlockNumber != 0 {
 			t.Errorf("got block number %d, want 0 (for first)", l.BlockNumber)
 		}
-	case <-timeout.C:
+	case <-ctx.Done():
 		t.Fatal("live entry reception timeout")
 	}
 	select {
@@ -107,12 +114,15 @@ func TestNoHistory(t *testing.T) {
 		if l.BlockNumber != 1 {
 			t.Errorf("got block number %d, want 1 (for second)", l.BlockNumber)
 		}
-	case <-timeout.C:
+	case <-ctx.Done():
 		t.Fatal("live entry reception timeout")
 	}
 }
 
 func TestReaderNoOverlap(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
 	sigHash := ether.HexToHash("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef")
 	r := Reader{Backend: &logStub{
 		historicN: 1,
@@ -123,7 +133,7 @@ func TestReaderNoOverlap(t *testing.T) {
 		},
 	}}
 
-	_, _, _, err := r.EventsWithHistory(&abi.Event{ID: sigHash})
+	_, _, _, err := r.EventsWithHistory(ctx, &abi.Event{ID: sigHash})
 	if !errors.Is(err, errNoOverlap) {
 		t.Errorf("got error %v, want a %q", err, errNoOverlap)
 	}

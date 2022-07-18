@@ -30,13 +30,13 @@ type Reader struct {
 }
 
 // EventsWithHistory resolves all logs matching eventType.
-func (r Reader) EventsWithHistory(eventType *abi.Event) (stream <-chan chain.Log, _ ethereum.Subscription, history []chain.Log, _ error) {
+func (r Reader) EventsWithHistory(ctx context.Context, eventType *abi.Event) (stream <-chan chain.Log, _ ethereum.Subscription, history []chain.Log, _ error) {
 	// first topic always is the signature hash of the respective event
-	return r.QueryWithHistory(&ethereum.FilterQuery{Topics: [][]ether.Hash{{eventType.ID}}})
+	return r.QueryWithHistory(ctx, &ethereum.FilterQuery{Topics: [][]ether.Hash{{eventType.ID}}})
 }
 
 // QueryWithHistory resolves all logs matching q.
-func (r Reader) QueryWithHistory(q *ethereum.FilterQuery) (stream <-chan chain.Log, _ ethereum.Subscription, history []chain.Log, _ error) {
+func (r Reader) QueryWithHistory(ctx context.Context, q *ethereum.FilterQuery) (stream <-chan chain.Log, _ ethereum.Subscription, history []chain.Log, _ error) {
 	// workaround https://github.com/ethereum/go-ethereum/issues/15063
 	const tryMax = 2
 	for tryN := 1; tryN <= tryMax; tryN++ {
@@ -45,16 +45,16 @@ func (r Reader) QueryWithHistory(q *ethereum.FilterQuery) (stream <-chan chain.L
 		if timeout == 0 {
 			timeout = 2 * time.Second
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		subscribeCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		stream := make(chan chain.Log, 60)
-		sub, err := r.Backend.SubscribeFilterLogs(ctx, *q, stream)
+		sub, err := r.Backend.SubscribeFilterLogs(subscribeCtx, *q, stream)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("etherstream: no subscription on log events: %w", err)
 		}
 		// ⚠️ must Unsubscribe
 
-		history, err := r.linkHistory(stream, q)
+		history, err := r.linkHistory(ctx, stream, q)
 		switch {
 		case errors.Is(err, errNoOverlap):
 			sub.Unsubscribe()
@@ -74,13 +74,13 @@ func (r Reader) QueryWithHistory(q *ethereum.FilterQuery) (stream <-chan chain.L
 var errNoOverlap = errors.New("historic events don't match [overlap] with subscription reception—chain reorganisation assumed")
 
 // LinkHistory returns the full history before the next entry from stream.
-func (r *Reader) linkHistory(stream <-chan chain.Log, q *ethereum.FilterQuery) ([]chain.Log, error) {
+func (r *Reader) linkHistory(ctx context.Context, stream <-chan chain.Log, q *ethereum.FilterQuery) ([]chain.Log, error) {
 	// fetch history
 	timeout := r.FetchTimeout
 	if timeout == 0 {
 		timeout = 7 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	history, err := r.Backend.FilterLogs(ctx, *q)
 	if err != nil {

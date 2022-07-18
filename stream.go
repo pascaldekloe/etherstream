@@ -18,29 +18,34 @@ import (
 
 // Reader configures the blockchain connectivity.
 //
-// Note to use WebSocker when using ethclient.DialContext,
-// because subscriptions won't work with regular HTTP RPC.
+// Note that users need WebSockets when calling ethclient.DialContext, because
+// subscriptions won't work with regular HTTP RPC.
 type Reader struct {
 	Backend ethereum.LogFilterer // blockchain connection
-
-	// idle time on which no content is assumed (defaults to 500 ms)
-	ReceiveExpire time.Duration
 
 	// limit for a subscription request (defaults to 2 s)
 	SubscribeTimeout time.Duration
 	// limit for history retreival (defaults to 7 s)
 	FetchTimeout time.Duration
+
+	// idle time on which no new content can be assumed
+	// (defaults to 500 ms)
+	ReceiveExpire time.Duration
 }
 
 // EventsWithHistory resolves all logs matching eventType.
+// The history is sorted in ascending order. The first receive from stream
+// directly follows the last entry from history, if any.
 func (r Reader) EventsWithHistory(ctx context.Context, eventType *abi.Event) (stream <-chan chain.Log, _ ethereum.Subscription, history []chain.Log, _ error) {
 	// first topic always is the signature hash of the respective event
 	return r.QueryWithHistory(ctx, &ethereum.FilterQuery{Topics: [][]ether.Hash{{eventType.ID}}})
 }
 
 // QueryWithHistory resolves all logs matching q.
+// The history is sorted in ascending order. The first receive from stream
+// directly follows the last entry from history, if any.
 func (r Reader) QueryWithHistory(ctx context.Context, q *ethereum.FilterQuery) (stream <-chan chain.Log, _ ethereum.Subscription, history []chain.Log, _ error) {
-	// workaround https://github.com/ethereum/go-ethereum/issues/15063
+	// limited retry on chain-reorganisation [errNoOverlap]
 	const tryMax = 2
 	for tryN := 1; tryN <= tryMax; tryN++ {
 		// subscribe live stream

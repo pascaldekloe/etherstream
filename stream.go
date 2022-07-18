@@ -17,6 +17,9 @@ import (
 )
 
 // Reader configures the blockchain connectivity.
+//
+// Note to use WebSocker when using ethclient.DialContext,
+// because subscriptions won't work with regular HTTP RPC.
 type Reader struct {
 	Backend ethereum.LogFilterer // blockchain connection
 

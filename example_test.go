@@ -24,10 +24,10 @@ func ExampleReader() {
 	}
 	etherReader := etherstream.Reader{Backend: ethereumRPCClient}
 
-	matchERC20Txs := ethereum.FilterQuery{Topics: [][]ether.Hash{{
+	exampleQ := ethereum.FilterQuery{Topics: [][]ether.Hash{{
 		ether.HexToHash("0xeb6c7d1cd53bd4a9d7c4478386be075d97a6372e435e72cb37313dfa17ad00d7"),
 	}}}
-	stream, sub, history, err := etherReader.QueryWithHistory(ctx, &matchERC20Txs)
+	stream, sub, history, err := etherReader.QueryWithHistory(ctx, &exampleQ)
 	if err != nil {
 		fmt.Println(err)
 		return
